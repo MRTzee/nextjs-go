@@ -1,0 +1,59 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    working_dir: /app
+    container_name: nextjs-app
+    command: "npm run dev"
+    env_file:
+      - ./frontend/.env
+    depends_on:
+      - backend
+
+  db:
+    image: postgres:15-alpine
+    restart: always
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    container_name: postgres-db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend:/app
+    working_dir: /app
+    container_name: golang-app
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    command: sh -c '/wait-for.sh db:5432 && go run main.go'
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    name: nextjs-go-network
+    driver: bridge
